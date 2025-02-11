@@ -1,0 +1,91 @@
+//Tailored to Fort Carson AUDS migrated systems.  
+//USB VID_PID codes are searching for Razer Gaming Peripherals
+//DISA (DAM 21-0581 Razer Synapse Zero Day Vulnerability
+//(derek.j.minkner.civ)
+let loggedOnUser = DeviceInfo
+    | extend data = parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let ProductNameMapping = datatable(PID: string, Vendor: string, ProductName: string)
+[
+    "0037", "Razer", "DeathAdder 2013 Gaming Mouse",
+    "003e", "Razer", "Naga Epic Chroma Gaming Mouse",
+    "0016", "Razer", "DeathAdder Gaming Mouse",
+    "0043", "Razer", "DeathAdder Chroma Gaming Mouse",
+    "0034", "Razer", "Taipan Ambidextrous Gaming Mouse",
+    "005c", "Razer", "DeathAdder Elite Gaming Mouse",
+    "006c", "Razer", "Mamba Elite Gaming Mouse",
+    "006e", "Razer", "DeathAdder Essential Gaming Mouse",
+    "0073", "Razer", "Mamba Wireless Gaming Mouse",
+    "007b", "Razer", "Viper Ultimate Wireless Gaming Mouse",
+    "0084", "Razer", "DeathAdder V2 Gaming Mouse",
+    "0085", "Razer", "Basilisk V2 Gaming Mouse",
+    "0086", "Razer", "Basilisk Ultimate Wireless Gaming Mouse",
+    "0091", "Razer", "Viper 8KHz Gaming Mouse",
+    "0036", "Razer", "Naga Hex Gaming Mouse",
+    "000d", "Razer", "DiamondBack 3G Gaming Mouse",
+    "00b9", "Razer", "Basilisk V3 X HyperSpeed Gaming Mouse",
+    "0065", "Razer", "Basilisk Essential Gaming Mouse",
+    "0096", "Razer", "Naga X Gaming Mouse",
+    "004d", "Razer", "DeathAdder 2000 Cynosa Pro Gaming Mouse",
+    "0098", "Razer", "DeathAdder Essential Gaming Mouse",
+    "0099", "Razer", "Basilisk V3 Gaming Mouse",
+    "0099", "Razer", "DeathAdder Essential Gaming Mouse",
+    "00B4", "Razer", "Naga V2 HyperSpeed Gaming Mouse",
+    "021e", "Razer", "Ornata Chroma Gaming Keyboard",
+    "022a", "Razer", "Cynosa Chroma Gaming Keyboard",
+    "023f", "Razer", "Cynosa Lite Gaming Keyboard",
+    "024e", "Razer", "BlackWidow V3 Gaming Keyboard",
+    "0257", "Razer", "Huntsman Mini Gaming Keyboard",
+    "025d", "Razer", "Ornata V2 Gaming Keyboard",
+    "025e", "Razer", "Cynosa V2 Gaming Keyboard",
+    "026c", "Razer", "Huntsman V2 Gaming Keyboard",
+    "02a2", "Razer", "Ornata V3 X Gaming Keyboard",
+    "0504", "Razer", "Kraken 7.1 V2 Gaming Headset",
+    "0510", "Razer", "Kraken 7.1V2 Gaming Headset",
+    "0065", "Razer", "USB SoundCard Black SharkV2 Gaming Headset",
+    "00b4", "Razer", "Naga Hyperspeed V2 Gaming Mouse",
+    "011a", "Razer", "BlackWidow Ultimate Gaming Keyboard",
+    "00b2", "Razer", "Deathadder V3 Gaming Keyboard",
+    "0529", "Razer", "USB SoundCard Black SharkV2 Gaming Headset",
+    "005e", "Razer", "Abyssus 2000 Gaming Mouse",
+    "007a", "Razer", "RC30-0305 Gaming Mouse",
+    "00aa", "Razer", "Basilisk V3 Pro Gaming Mouse",
+    "010b", "Razer", "Arctosa Gaming Keyboard",
+    "02a1", "Razer", "Ornata Gaming Keyboard",
+    "0228", "Razer", "USB SoundCard Black SharkV2 Gaming Headset",
+    "122e", "Razer", "Thunderbolt 4 Dock Chroma Gaming Dock",
+    "0f30", "Razer", "Thunderbolt 4 Dock Chroma Gaming Dock",
+    "0f21", "Razer", "Thunderbolt 4 Dock Chroma Gaming Dock",
+    "0f2f", "Razer", "Thunderbolt 4 Dock Chroma Gaming Dock",
+    "0064", "Razer", "Basilisk Gaming Mouse",
+    // More Razer Devices to be added upon further discovery
+];
+let DeviceEventsWithPID = DeviceEvents
+| where DeviceName startswith "CARS" //change to your installation system naming convetion as needed
+| where ActionType == 'PnpDeviceConnected'
+| extend PNP = parsejson(AdditionalFields)
+| extend PnPDeviceId = PNP.DeviceId
+| extend DeviceDescription = PNP.DeviceDescription
+| where PnPDeviceId startswith @'USB\'
+| extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+| extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+| where Device_VID == "1532" // Filter for Razer devices
+| summarize arg_max(DeviceName, *) by DeviceName;
+DeviceEventsWithPID
+| join kind=leftouter (ProductNameMapping) on $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1  
+| sort by Timestamp desc
