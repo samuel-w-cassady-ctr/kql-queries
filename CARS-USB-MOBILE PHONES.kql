@@ -1,0 +1,50 @@
+//Tailored to Fort Carson AUDS migrated systems.  
+//USB VID_PID codes are searching for Mobile Phones (Apple, Android, Google)
+//(derek.j.minkner.civ)
+let loggedOnUser = DeviceInfo
+    | extend data = parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let DeviceMapping = datatable(VID: string, PID: string, Vendor: string, ProductName: string)
+[
+    "05ac", "12a8", "Apple", "iPhone",
+    "05ac", "12ab", "Apple", "iPad",
+    "05ac", "12a9", "Apple", "iPad 2",
+    "05ac", "12af", "Apple", "Watch",
+    "05ac", "1393", "Apple", "AirPods Case",
+    "04e8", "6860", "Samsung", "Galaxy Series",
+    "18d1", "4e11", "Google", "Nexus One",
+    "18d1", "4e21", "Google", "Nexus S",
+    "18d1", "4e41", "Google", "Nexus 7",
+    "18d1", "4ee1", "Google", "Nexus Pixel",
+    "18d1", "4e11", "Google", "Nexus One"
+];
+let DeviceEventsWithPID = DeviceEvents
+| where DeviceName startswith "CARS" //change to your installation system naming convetion as needed
+| where ActionType == 'PnpDeviceConnected'
+| extend PNP = parsejson(AdditionalFields)
+| extend PnPDeviceId = PNP.DeviceId
+| extend DeviceDescription = PNP.DeviceDescription
+| where PnPDeviceId startswith @'USB\'
+| extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+| extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+| where Device_VID has_any("05ac", "04e8", "18d1") // Include VID for Apple, Android, and Google
+| where Device_PID has_any("12a8", "12ab", "12a9", "12af", "1393", "6860", "4e11", "4e21", "4e41", "4ee1", "4e11");
+//Add to display single DeviceName results vs multiple entries | summarize arg_max(DeviceName, *) by DeviceName
+DeviceEventsWithPID
+| join kind=leftouter (DeviceMapping) on $left.Device_VID == $right.VID and $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1
+| sort by Timestamp desc
