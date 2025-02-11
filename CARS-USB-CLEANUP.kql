@@ -1,0 +1,42 @@
+let loggedOnUser = DeviceInfo
+    | extend data = parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let ProductNameMapping = datatable(PID: string, Vendor: string, ProductName: string)
+[
+    "5004", "Microdia", "Redragon Mitra RGB Gaming Keyboard",
+    "0f99", "Maxxter", "Optical Gaming Mouse",
+    "0f97", "Maxxter", "Optical Gaming Mouse Xtrem",
+    "8367", "Maxxter", "Telink Wireless Receiver",
+    "4102", "MosArt", "Wireless Mouse",
+    "fa23", "Areson", "Bluetooth Unifying Receiver"
+];
+let DeviceEventsWithPID = DeviceEvents
+| where DeviceName startswith "CARS"
+| where ActionType == 'PnpDeviceConnected'
+| extend PNP = parsejson(AdditionalFields)
+| extend PnPDeviceId = PNP.DeviceId
+| extend DeviceDescription = PNP.DeviceDescription
+| where PnPDeviceId startswith @'USB\'
+| extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+| extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+| where Device_VID has_any("0c45", "18f8", "248a", "062a", "25a7") //VID for Logitech, SteelSeries, Razer, and Corsair
+| where Device_PID has_any("5004", "0f99", "0f97", "8367", "4102", "fa23")
+| summarize arg_max(DeviceName, *) by DeviceName;
+DeviceEventsWithPID
+| join kind=leftouter (ProductNameMapping) on $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1  
+| sort by Timestamp desc
