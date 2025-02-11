@@ -1,4 +1,4 @@
-//Tailored to Fort Carson AUDS migrated systems.  
+//Tailored to AUDS migrated systems.  
 //USB VID_PID codes are searching for Mobile Phones (Apple, Android, Google)
 //(derek.j.minkner.civ)
 let loggedOnUser = DeviceInfo
@@ -21,7 +21,7 @@ let DeviceMapping = datatable(VID: string, PID: string, Vendor: string, ProductN
     "18d1", "4e11", "Google", "Nexus One"
 ];
 let DeviceEventsWithPID = DeviceEvents
-| where DeviceName startswith "CARS" //change to your installation system naming convetion as needed
+| where DeviceName startswith "CARS" //change to your installation system naming connvetion as needed
 | where ActionType == 'PnpDeviceConnected'
 | extend PNP = parsejson(AdditionalFields)
 | extend PnPDeviceId = PNP.DeviceId
