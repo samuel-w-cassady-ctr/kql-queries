@@ -1,4 +1,4 @@
-//Tailored to Fort Carson AUDS migrated systems.  
+//Tailored to AUDS migrated systems.  
 //USB VID_PID codes are searching for Logitech USB Gaming Peripherals or Bluetooth Unifying Receiver
 //(derek.j.minkner.civ)
 let loggedOnUser = DeviceInfo
