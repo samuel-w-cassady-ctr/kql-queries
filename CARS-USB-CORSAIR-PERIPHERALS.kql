@@ -1,0 +1,60 @@
+//Tailored to Fort Carson AUDS migrated systems.  
+//USB VID_PID codes are searching for Corsair USB Gaming Peripherals
+//(derek.j.minkner.civ)
+let loggedOnUser = DeviceInfo
+    | extend data = parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let DeviceMapping = datatable(PID: string, Vendor: string, ProductName: string)
+[
+    "1c1a", "Corsair", "Harpoon Wireless Dongle",
+    "1b3d", "Corsair", "K55 RGB Gaming Keyboard",
+    "1ba4", "Corsair", "K55 RGB Pro Gaming Keyboard",
+    "1b5e", "Corsair", "Harpoon Wireless Gaming Mouse",
+    "1b2d", "Corsair", "K95 RGB Platinum Gaming Keyboard",
+    "1b2e", "Corsair", "M65 Pro RGB Gaming Mouse",
+    "1b1c", "Corsair", "M65 Pro RGB Gaming Mouse",
+    "1b3c", "Corsair", "Harpoon RGB Gaming Mouse",
+    "1b13", "Corsair", "Vengeance K70RGB Gaming Keyboard",
+    "1b20", "Corsair", "STRAFE RGB Gaming Keyboard",
+    "1b09", "Corsair", "Vengeance K70R Gaming Keyboard",
+    "1b11", "Corsair", "K95 RGB Mechanical Gaming Keyboard",
+    "1b49", "Corsair", "K70 RGB MK2 Mechanical Gaming Keyboard",
+    "1b8b", "Corsair", "Scimitar RGB Elite Gaming Mouse",
+    "1b07", "Corsair", "Vengeance K65 Gaming Keyboard",
+    "0a17", "Corsair", "VOID Pro USB Gaming Headset",
+    "1b08", "Corsair", "Vengeance K95 Gaming Keyboard",
+    "1b04", "Corsair", "Raptor K50 Gaming Keyboard",
+    "0a60", "Corsair", "Vengeance K60 Gaming Keyboard",
+    "1b74", "Corsair", "Glaive RGB Pro Gaming Mouse"
+    //More Corsair devices to be added upon discovery
+];
+let DeviceEventsWithPID = DeviceEvents
+| where DeviceName startswith "CARS" //change to your installation system naming convetion as needed
+| where ActionType == 'PnpDeviceConnected'
+| extend PNP = parsejson(AdditionalFields)
+| extend PnPDeviceId = PNP.DeviceId
+| extend DeviceDescription = PNP.DeviceDescription
+| where PnPDeviceId startswith @'USB\'
+| extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+| extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+| where Device_VID == "1b1c" // Filter for Corsair devices
+//Add to display single DeviceName results vs multiple entries | summarize arg_max(DeviceName, *) by DeviceName
+;
+DeviceEventsWithPID
+| join kind=leftouter (DeviceMapping) on $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1
+| sort by Timestamp desc
