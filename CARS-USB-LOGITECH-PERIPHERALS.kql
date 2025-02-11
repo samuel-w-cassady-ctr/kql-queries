@@ -1,0 +1,55 @@
+//Tailored to Fort Carson AUDS migrated systems.  
+//USB VID_PID codes are searching for Logitech USB Gaming Peripherals or Bluetooth Unifying Receiver
+//(derek.j.minkner.civ)
+let loggedOnUser = DeviceInfo
+    | extend data = parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let DeviceMapping = datatable(VID: string, PID: string, Vendor: string, ProductName: string)
+[
+    "046d", "c52b", "Logitech", "Bluetooth Unifying Receiver",
+    "046d", "c534", "Logitech", "Bluetooth Unifying Receiver",
+    "046d", "c539", "Logitech", "Lightspeed Wireless Receiver",
+    "046d", "c532", "Logitech", "Bluetooth Unifying Receiver",
+    "046d", "c084", "Logitech", "G203 Gaming Mouse",
+    "046d", "c336", "Logitech", "G213 Prodigy Gaming Keyboard",
+    "046d", "c08b", "Logitech", "G502 HERO Gaming Mouse",
+    "046d", "c33a", "Logitech", "G413 Gaming Keyboard",
+    "046d", "c332", "Logitech", "G502 Proteus Spectrum Gaming Mouse",
+    "046d", "c335", "Logitech", "G910 Orion Spectrum Mechanical Keyboard",
+    "046d", "c32b", "Logitech", "G910 Orion Spark Mechanical Keyboard",
+    "046d", "c24c", "Logitech", "G400s Gaming Mouse",
+    "046d", "c246", "Logitech", "G300 Gaming Mouse",
+    "046d", "c092", "Logitech", "G102/G203 Lightsync Gaming Mouse",
+    "046d", "b305", "Logitech", "Bluetooth Mini Receiver",
+    "046d", "c080", "Logitech", "G303 Gaming Mouse"
+];
+let DeviceEventsWithPID = DeviceEvents
+| where DeviceName startswith "CARS" //change to your installation system naming convetion as needed
+| where ActionType == 'PnpDeviceConnected'
+| extend PNP = parsejson(AdditionalFields)
+| extend PnPDeviceId = PNP.DeviceId
+| extend DeviceDescription = PNP.DeviceDescription
+| where PnPDeviceId startswith @'USB\'
+| extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+| extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+| where Device_VID == "046d" // filter for Logitech vendor
+| where Device_PID in ("c52b", "c534", "c539", "c532", "c084", "c336", "c08b", "c33a", "c332", "c335", "c32b", "c24c", "c246", "c092", "b305", "c080");
+//Add to display single DeviceName results vs multiple entries | summarize arg_max(DeviceName, *) by DeviceName
+DeviceEventsWithPID
+| join kind=leftouter (DeviceMapping) on $left.Device_VID == $right.VID and $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1
+| sort by Timestamp desc
