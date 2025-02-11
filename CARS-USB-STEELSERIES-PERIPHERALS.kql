@@ -1,0 +1,56 @@
+//Tailored to Fort Carson AUDS migrated systems.  
+//USB VID_PID codes are searching for STEEL Vendor Peripheral Devices
+//SWC (samuel.w.cassady.ctr)
+let loggedOnUser = DeviceInfo
+    | extend data=parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let ProductNameMapping = datatable(PID: string, Vendor: string, ProductName: string)
+[
+    "1282", "SteelSeries", "GameDac Gaming Audio/Headset",
+    "12aa","SteelSeries","Arctis 5 RGB Gaming Audio/Headset",
+    "1208","SteelSeries","Apex 300 Gaming Keyboard",
+    "1361","SteelSeries","Sensei Gaming Mouse",
+    "160e","SteelSeries","Apex 100 Gaming Keyboard",
+    "161a","SteelSeries","ApS Apex 3 Gaming Mouse",
+    "1622","SteelSeries","Apex TKL Gaming Keyboard",
+    "1710","SteelSeries","Rival 300 Gaming Mouse",
+    "1720","SteelSeries","ApS Gaming Mouse",
+    "1724","SteelSeries","Rival 600 Gaming Mouse",
+    "1824","SteelSeries","Rival 3 - Wireless Gaming Mouse",
+    "182c","SteelSeries","Prime+ Gaming Mouse",
+    "1836","SteelSeries","Aerox 3 Wireless Gaming Mouse",
+    "1838","SteelSeries","Aerox 3 - Wireless Gaming Mouse",
+    "1729","SteelSeries","Rival 110 Gaming Mouse",
+    "184c", "SteelSeries", "ApS Rival 3 Gaming Mouse"
+    //More STEELSERIES added upon discovery
+];
+let DeviceEventsWithPID = DeviceEvents
+| where DeviceName contains "CARS"
+| where ActionType == 'PnpDeviceConnected'
+| extend PNP = parsejson(AdditionalFields)
+| extend PnPDeviceId = PNP.DeviceId
+| extend DeviceDescription = PNP.DeviceDescription
+| where PnPDeviceId startswith @'USB\'
+| extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+| extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+| where Device_VID == "1038";
+// Add to display single DeviceName results vs multiple entries | summarize arg_max(DeviceName, *) by DeviceName
+//| where DeviceDescription contains "Steel"
+DeviceEventsWithPID
+| join kind=leftouter (ProductNameMapping) on $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1  
+| sort by Timestamp desc
