@@ -1,0 +1,46 @@
+//Tailored to Fort Carson AUDS migrated systems.  
+//USB VID_PID codes are searching for Bluetooth Unifying Receivers
+//(derek.j.minkner.civ)
+let loggedOnUser = DeviceInfo
+    | extend data = parsejson(LoggedOnUsers)
+    | mv-expand data
+    | extend userName = data.UserName
+    | project userName, DeviceId, Timestamp;
+let ProductNameMapping = datatable(PID: string, Vendor: string, ProductName: string)
+[
+    "c52b", "Logitech", "Bluetooth Unifying Receiver",
+    "c534", "Logitech", "Bluetooth Unifying Receiver",
+    "c539", "Logitech", "Lightspeed Wireless Receiver",
+    "c532", "Logitech", "Bluetooth Unifying Receiver",
+    "b305", "Logitech", "Bluetooth Mini Receiver",
+    "4102", "Mosart", "Bluetooth Unifying Receiver"
+    //More Vendor PID_VIDs will be added upon discovery
+];
+let DeviceEventsWithPID = DeviceEvents
+    | where DeviceName startswith "CARS"
+    | where ActionType == 'PnpDeviceConnected'
+    | extend PNP = parsejson(AdditionalFields)
+    | extend PnPDeviceId = PNP.DeviceId
+    | extend DeviceDescription = PNP.DeviceDescription
+    | where PnPDeviceId startswith @'USB\'
+    | extend Device_VID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "vid_") + 4, 4)
+    | extend Device_PID = substring(tolower(PnPDeviceId), indexof(tolower(PnPDeviceId), "pid_") + 4, 4)
+    | where Device_VID has_any("046d", "062a")
+    | where Device_PID has_any("c52b", "c534", "c539", "c532", "b305", "4102")
+    | summarize arg_max(DeviceName, *) by DeviceName;
+DeviceEventsWithPID
+| join kind=leftouter (ProductNameMapping) on $left.Device_PID == $right.PID
+| project
+    Timestamp,
+    DeviceName,
+    ActionType,
+    DeviceId,
+    Device_VID,
+    Device_PID,
+    Vendor,
+    ProductName,
+    ReportId
+| join kind=inner (loggedOnUser) on DeviceId
+| summarize arg_max(Timestamp1, *) by Timestamp
+| project-away DeviceId1, Timestamp1  
+| sort by Timestamp desc
