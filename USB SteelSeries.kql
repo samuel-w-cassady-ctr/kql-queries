@@ -1,4 +1,4 @@
-//Tailored to Fort Carson AUDS migrated systems.  
+//Tailored to AUDS migrated systems.  
 //USB VID_PID codes are searching for STEEL Vendor Peripheral Devices
 //SWC (samuel.w.cassady.ctr)
 let loggedOnUser = DeviceInfo
